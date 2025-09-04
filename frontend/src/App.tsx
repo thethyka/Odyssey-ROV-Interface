@@ -1,10 +1,19 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import reactLogo from './assets/react.svg'
 import viteLogo from '/vite.svg'
 import './App.css'
 
 function App() {
   const [count, setCount] = useState(0)
+
+  const [msg, setMsg] = useState<string>("(loading...)");
+
+  useEffect(() => {
+    fetch("http://localhost:8000/hello")
+      .then((res) => res.json())
+      .then((data) => setMsg(data.message))
+      .catch((err) => setMsg("Error: " + err.message));
+  }, []);
 
   return (
     <>
@@ -34,6 +43,7 @@ function App() {
       <div className="text-center space-y-4">
         <h1 className="text-4xl font-bold">Odyssey ROV HMI Frontend</h1>
         <p className="opacity-80">Vite + React + TS + Tailwind</p>
+        <p> Backend says {msg}! </p>
       </div>
     </div>
 

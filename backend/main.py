@@ -34,3 +34,7 @@ async def ws(ws: WebSocket):
         pass
     finally:
         await ws.close()
+        
+@app.get("/hello")
+def say_hello():
+    return {"message": "Hello from FastAPI backend!"}
