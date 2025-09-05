@@ -7,7 +7,7 @@ Apparently, it has a starry, mesmerizing effect.
 
 We need to FIND THIS SLUG!! for *science*, of course.
 
-The mission: navigate to and collect a rare bioluminescent sea slug (*Bathydevius caudactylus*), and return it to a collection pod.  
+The mission: Using a HMI to control a ROV, the Odyssey, navigate to and collect a rare bioluminescent sea slug (*Bathydevius caudactylus*), and return it to a collection pod. 
 
 ---
 
