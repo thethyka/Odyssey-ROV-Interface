@@ -1,0 +1,1 @@
+// Central store for ROV telemetry and UI state
