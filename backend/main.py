@@ -1,5 +1,7 @@
 # backend/main.py
-from fastapi import FastAPI, WebSocket
+
+from pydantic import BaseModel
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
@@ -21,17 +23,19 @@ def read_root():
 def health():
     return {"status": "ok"}
 
-@app.websocket("/ws")
-async def ws(ws: WebSocket):
+
+@app.websocket("/ws/telemetry")
+async def websock(ws: WebSocket):
     await ws.accept()
-    await ws.send_text("connected")
+    await ws.send_text("Server Accepted")
     try:
         while True:
             msg = await ws.receive_text()
             await ws.send_text(f"echo: {msg}")
-    except Exception:
-        # client disconnected or error; close gracefully
+        
+    except WebSocketDisconnect:
         pass
+        
     finally:
         await ws.close()
         
