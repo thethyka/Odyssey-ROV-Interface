@@ -33,19 +33,19 @@ odyssey-rov-hmi/
 
 ## 🔑 Backend
 
-(Subject to change)
+The backend simulates the ROV's state and environment. It streams real-time telemetry (depth, power, system status) to the frontend via WebSockets and serves historical data on demand via a gRPC service.
 
 ---
 
 ## 🔑 Frontend
 
-(Subject to change)
+The frontend is the operator's HMI for the mission. It renders the live telemetry from the backend, providing critical situational awareness. It displays system status, alerts, and environmental data to help the operator find the slug and monitor ROV health.
 
 ---
 
 ## 🔑 Protocol Buffers
 
-(Subject to change)
+The `proto` files define the strict data contract for the gRPC `AlertService`. This ensures type-safe communication between the frontend and backend when requesting historical data like past alerts.
 
 ---
 
@@ -69,3 +69,4 @@ docker compose up
 
 ```
 ⸻
+````
