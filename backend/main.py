@@ -1,12 +1,14 @@
-# backend/main.py
-
-from pydantic import BaseModel
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from typing import List
+import asyncio
+
+from .simulator import RovSimulator
+from .logs import LogEntry
 
 app = FastAPI()
+simulator = RovSimulator()
 
-# Dev CORS (safe because FE/BE are same machine in dev)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
@@ -15,30 +17,48 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.get("/")
-def read_root():
+async def read_root():
     return {"message": "Odyssey ROV Backend is running"}
 
+
 @app.get("/healthz")
-def health():
+async def health():
     return {"status": "ok"}
 
 
+@app.get("/mission-log", response_model=List[LogEntry])
+async def get_mission_log():
+    """Expose mission log over REST (for demo until gRPC is wired)."""
+    return simulator.get_mission_log()
+
+
+@app.get("/hello")
+async def say_hello():
+    return {"message": "Hello from FastAPI backend!"}
+
+
 @app.websocket("/ws/telemetry")
-async def websock(ws: WebSocket):
+async def telemetry_ws(ws: WebSocket):
     await ws.accept()
-    await ws.send_text("Server Accepted")
     try:
         while True:
-            msg = await ws.receive_text()
-            await ws.send_text(f"echo: {msg}")
-        
+            telemetry = simulator.get_telemetry()
+            await ws.send_json(telemetry.model_dump())
+
+            try:
+                msg = await asyncio.wait_for(
+                    ws.receive_json(), timeout=1.0 / simulator.TICKS_PER_SECOND
+                )
+                simulator.handle_command(msg)
+            except asyncio.TimeoutError:
+                pass
+
+            simulator.update()
+            await asyncio.sleep(1.0 / simulator.TICKS_PER_SECOND)
+
     except WebSocketDisconnect:
-        pass
-        
+        print("WebSocket disconnected")
     finally:
         await ws.close()
-        
-@app.get("/hello")
-def say_hello():
-    return {"message": "Hello from FastAPI backend!"}
