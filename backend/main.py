@@ -3,7 +3,7 @@
 from pydantic import BaseModel
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-
+from .models.py import 
 app = FastAPI()
 
 # Dev CORS (safe because FE/BE are same machine in dev)
@@ -16,11 +16,11 @@ app.add_middleware(
 )
 
 @app.get("/")
-def read_root():
+async def read_root():
     return {"message": "Odyssey ROV Backend is running"}
 
 @app.get("/healthz")
-def health():
+async def health():
     return {"status": "ok"}
 
 
@@ -40,5 +40,5 @@ async def websock(ws: WebSocket):
         await ws.close()
         
 @app.get("/hello")
-def say_hello():
+async def say_hello():
     return {"message": "Hello from FastAPI backend!"}

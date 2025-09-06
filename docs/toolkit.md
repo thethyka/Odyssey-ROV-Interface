@@ -36,8 +36,8 @@ These are the ROV subsystems whose state will be simulated by the backend.
     "manipulator_arm": { "status": "stowed", "sample_collected": false },
     "environment": { "depth_meters": 2015.7, "water_temp_celsius": 2.8 }
   },
-  "mission": { "status": "en_route" },
-  "alert": { "active": false, "severity": null, "message": null }
+  "mission_state": { "status": "en_route" },
+  "active_alert": { "active": false, "severity": null, "message": null }
 }
 
 ```
