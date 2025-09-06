@@ -5,8 +5,6 @@ import asyncio
 
 from .simulator import RovSimulator
 from .logs import LogEntry
-from backend.simulator import RovSimulator
-from backend.logs import LogEntry
 
 app = FastAPI()
 simulator = RovSimulator()
