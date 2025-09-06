@@ -2,8 +2,9 @@ import { useState } from "react";
 import SubsystemControls from "../features/SubsystemControls/SubsystemControls.tsx";
 import SystemOverview from "../features/SystemOverview/SystemOverview.tsx";
 import Tabs from "./Tabs.tsx";
+import type { TabConfig } from "../types/index.ts";
 
-const TABS_CONFIG = [
+const TABS_CONFIG: TabConfig[] = [
   {
     id: "system",
     label: "System Overview",
@@ -29,7 +30,7 @@ export default function MainContent() {
         setActiveTabId={setActiveTabId}
       />
 
-      <div className="tab-content mt-4">{activeTab!.component}</div>
+      <div className="tab-content">{activeTab!.component}</div>
     </section>
   );
 }
