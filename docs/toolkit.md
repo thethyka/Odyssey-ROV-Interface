@@ -122,11 +122,6 @@ message LogEntry {
 
 ## 4. HMI Layout & Component Architecture
 
-The HMI is a single-screen app with a persistent layout to maintain constant situational awareness.
-
-
-### Overall Layout
-
 The HMI is a single-screen app with a persistent structure to maintain constant situational awareness:
 
 | [ A ] Header: Master Status |
@@ -148,6 +143,7 @@ The HMI is a single-screen app with a persistent structure to maintain constant 
     - WARNING → Yellow  
     - CRITICAL → Red  
   - **Flashing behavior**: When severity is `WARNING` or `CRITICAL`, the banner should flash to draw attention.
+  - **Note for Frontend**: A state can change very quickly (e.g., from WARNING to CRITICAL, then back to NOMINAL after an operator action). The frontend should handle these rapid transitions gracefully to avoid a jarring or confusing user experience.
 
 ---
 
@@ -165,11 +161,11 @@ The HMI is a single-screen app with a persistent structure to maintain constant 
 
 #### C. Main Content: System Views
 - **`ScenarioSelector`**
-  - Initial view shown when mission_state = `standby`.
+  - Initial view shown when `mission_state.status` = `standby`.
   - Allows the operator to send a `START_SIMULATION` command with a scenario choice (`nominal`, `pressure_anomaly`, `power_fault`).
-  - **Scenario Lifecycle**:  
-    - Once a scenario begins, the selector disappears.  
-    - At the end of a scenario (`mission_success` or any failure state), the frontend should prompt the user with a **"Return to Scenario Selector"** action that resets the UI to standby.  
+  - **Scenario Lifecycle**:
+    - Once a scenario begins, the selector disappears.
+    - At the end of a scenario (`mission_success` or any failure state), the frontend should prompt the user with a **"Return to Scenario Selector"** action that resets the UI to standby.
     - Backend currently resets automatically when `START_SIMULATION` is called again.
 - **`ViewSwitcher`**
   - Tabs for toggling between two detail views once a scenario is running.
@@ -183,6 +179,7 @@ The HMI is a single-screen app with a persistent structure to maintain constant 
     - **Manipulator Arm Card** → Includes **"Deploy Arm"** and **"Collect Sample"** buttons.
     - **Science Package Card** → Includes **GuardedActionButton** for the **"Jettison Package"** command.
       - **Guarded Action UX**: This button must require confirmation (e.g. click twice, or confirmation modal). The backend expects a plain `JETTISON_PACKAGE` command, so confirmation is a **frontend-only responsibility**.
+  - **Note for Frontend - Command Availability**: The backend does not explicitly state which commands are valid at any given time. The frontend is responsible for implementing the UI logic to enable/disable control buttons based on the current system state. For example, the "Collect Sample" button should be disabled until `manipulator_arm.status` is 'deployed'. This prevents user confusion from clicking a button that does nothing.
 
 ---
 
@@ -207,3 +204,5 @@ The HMI is a single-screen app with a persistent structure to maintain constant 
   - Implement guarded action UX for irreversible commands.  
   - Manage scenario lifecycle (reset UI to standby when missions end).  
   - Poll mission log via REST until gRPC is available.
+  - **(New) Manage Command Availability**: Intelligently enable/disable action buttons based on the current telemetry to guide the operator and prevent invalid actions.
+  - **(New) Communicate Operator Override**: Clearly indicate when an automated scenario has been manually overridden by the operator (e.g., after pressing "All Stop"). The backend will halt the scenario logic, but the frontend must visually communicate this "manual control" or "paused" state to the user.
