@@ -28,6 +28,7 @@ odyssey-rov-hmi/
 - **[Philosophy](docs/philosophy.md)**: The "why" — mission, operator goals, and design principles.
 - **[Style Guide](docs/style-guide.md)**: The "how" — colors, typography, icons, and layout rules.
 - **[Toolkit](docs/toolkit.md)**: The "what" - Reusable UI components, core objects, and gRPC services.
+- **[Stories](docs/stories.md)**: Set of simulation stories for our HMI, since the ROV is simulated.
 
 ---
 
