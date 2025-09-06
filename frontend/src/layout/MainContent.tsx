@@ -30,7 +30,7 @@ export default function MainContent() {
         setActiveTabId={setActiveTabId}
       />
 
-      <div className="tab-content">{activeTab!.component}</div>
+      <div className="tab-content">{activeTab?.component || <div>Tab not found</div>}</div>
     </section>
   );
 }
