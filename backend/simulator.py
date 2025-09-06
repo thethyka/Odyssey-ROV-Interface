@@ -1,7 +1,8 @@
+# backend/simulator.py
 from datetime import datetime, timezone
 from typing import Optional, List, Dict
 
-from .models import (
+from backend.models import (
     RovState,
     MissionState,
     ActiveAlert,
@@ -13,15 +14,18 @@ from .models import (
     SciencePackage,
     Environment,
 )
-from .logs import LogEntry, LogLevel
-
-
-## RovSimulator written by ChatGPT.
+from backend.logs import LogEntry, LogLevel
 
 
 class RovSimulator:
     """
     Manages the state and scenario logic for the Odyssey ROV simulation.
+
+    Key behavior changes vs prior version:
+    - Pressure Anomaly 'All Stop': no depth snap; we keep current depth but
+      immediately clear the alert and mark hull status nominal (UX-friendly).
+    - Operator override is honored across scenarios: once set, scenario update
+      logic won't force propulsion, nor escalate the anomaly further.
     """
 
     TARGET_DEPTH = 2000.0
@@ -33,12 +37,17 @@ class RovSimulator:
     PRESSURE_WARNING_THRESHOLD = TARGET_DEPTH * PRESSURE_PER_METER * 1.1
     PRESSURE_CRITICAL_THRESHOLD = TARGET_DEPTH * PRESSURE_PER_METER * 1.2
 
+    # Ticks-per-second (used by the websocket loop)
+    TICKS_PER_SECOND = 1
+
     def __init__(self):
-        self.fast_mode: bool = False
         self.active_scenario: Optional[str] = None
         self.scenario_timer: int = 0
         self.simulation_running: bool = False
         self.mission_log: List[LogEntry] = []
+        self.operator_override: bool = (
+            False  # set when operator issues a propulsion command
+        )
         self._reset_state()
 
     # --- Setup & Logging ---
@@ -59,6 +68,7 @@ class RovSimulator:
         self.scenario_timer = 0
         self.simulation_running = False
         self.mission_log = []
+        self.operator_override = False
 
     def _add_log_entry(self, level: LogLevel, message: str):
         """Record a new mission log entry."""
@@ -66,7 +76,6 @@ class RovSimulator:
             timestamp=datetime.now(timezone.utc), level=level, message=message
         )
         self.mission_log.append(entry)
-        print(f"LOG [{level.value}]: {message}")
 
     # --- Public API ---
 
@@ -108,11 +117,16 @@ class RovSimulator:
                     LogLevel.OPERATOR, "Command Sent: JETTISON_PACKAGE."
                 )
                 self._handle_jettison_package()
+            case _:
+                self._add_log_entry(
+                    LogLevel.WARNING, f"Unknown command: {command_name}"
+                )
 
     def update(self):
-        """Advance simulation one tick (1 Hz)."""
+        """Advance simulation by one tick (called by websocket loop)."""
         if not self.simulation_running:
             return
+
         self.scenario_timer += 1
 
         updater = getattr(self, f"_update_{self.active_scenario}_scenario", None)
@@ -140,16 +154,21 @@ class RovSimulator:
             )
 
     def _handle_set_propulsion(self, status: str):
-        if status in ["active", "inactive"]:
-            self.rov_state.propulsion.status = status
-            if (
-                self.active_scenario == "pressure_anomaly"
-                and status == "inactive"
-                and self.rov_state.hull_integrity.status == "warning"
-            ):
+        if status not in ["active", "inactive"]:
+            return
+
+        self.rov_state.propulsion.status = status
+        self.operator_override = True  # operator is in control from now on
+
+        # Special handling for Pressure Anomaly: clear the condition without snapping depth
+        if self.active_scenario == "pressure_anomaly" and status == "inactive":
+            if self.rov_state.hull_integrity.status in ["warning", "critical"]:
+                # Keep current depth (no snap), but clear the anomaly and alert.
                 self.rov_state.hull_integrity.status = "nominal"
                 self.alert = ActiveAlert(active=False)
+                self.scenario_timer = 0
                 self._add_log_entry(LogLevel.INFO, "Hull pressure returned to nominal.")
+                self._add_log_entry(LogLevel.INFO, "Operator intervention successful.")
 
     def _handle_deploy_arm(self):
         if self.rov_state.manipulator_arm.status == "stowed":
@@ -169,7 +188,11 @@ class RovSimulator:
             self.rov_state.science_package.status = "jettisoned"
             if self.rov_state.power.status == "fault":
                 self.rov_state.power.status = "discharging"
+                self.alert = ActiveAlert(active=False)
                 self.mission_state.status = "emergency_ascent"
+                # Force propulsion on for ascent, but still mark as operator override
+                self.rov_state.propulsion.status = "active"
+                self.operator_override = True
                 self._add_log_entry(
                     LogLevel.INFO, "Science package jettisoned. Power drain stabilized."
                 )
@@ -180,20 +203,21 @@ class RovSimulator:
     # --- Scenario Logic ---
 
     def _update_nominal_scenario(self):
-        # Descent
-        if (
-            self.mission_state.status == "en_route"
-            and self.rov_state.environment.depth_meters < self.TARGET_DEPTH
-        ):
-            self.rov_state.propulsion.status = "active"
-        elif (
-            self.mission_state.status == "en_route"
-            and self.rov_state.environment.depth_meters >= self.TARGET_DEPTH
-        ):
-            self.mission_state.status = "searching"
-            self.rov_state.propulsion.status = "inactive"
-            self.scenario_timer = 0
-            self._add_log_entry(LogLevel.INFO, "Mission status changed to 'searching'.")
+        # Respect operator override: do not force propulsion if the operator has intervened.
+        if self.mission_state.status == "en_route":
+            if (
+                not self.operator_override
+                and self.rov_state.environment.depth_meters < self.TARGET_DEPTH
+            ):
+                self.rov_state.propulsion.status = "active"
+            elif self.rov_state.environment.depth_meters >= self.TARGET_DEPTH:
+                self.mission_state.status = "searching"
+                if not self.operator_override:
+                    self.rov_state.propulsion.status = "inactive"
+                self.scenario_timer = 0
+                self._add_log_entry(
+                    LogLevel.INFO, "Mission status changed to 'searching'."
+                )
 
         # Searching prompt
         if (
@@ -217,7 +241,9 @@ class RovSimulator:
             and self.mission_state.status != "returning"
         ):
             self.mission_state.status = "returning"
-            self.rov_state.propulsion.status = "active"
+            # If operator hasn't explicitly stopped propulsion, turn it on for ascent
+            if self.rov_state.propulsion.status != "inactive":
+                self.rov_state.propulsion.status = "active"
             self.alert = ActiveAlert(active=False)
             self._add_log_entry(LogLevel.INFO, "Mission status changed to 'returning'.")
 
@@ -234,9 +260,14 @@ class RovSimulator:
             )
 
     def _update_pressure_anomaly_scenario(self):
+        # If operator has intervened, do not force propulsion or escalate the anomaly any further.
+        if self.operator_override:
+            return
+
         if self.mission_state.status == "en_route":
             self.rov_state.propulsion.status = "active"
 
+        # Escalation logic only active if not overridden by operator
         if (
             self.rov_state.hull_integrity.status == "nominal"
             and self.rov_state.hull_integrity.hull_pressure_kpa
@@ -284,13 +315,16 @@ class RovSimulator:
             self.mission_state.status == "en_route"
             and self.rov_state.environment.depth_meters < self.TARGET_DEPTH
         ):
-            self.rov_state.propulsion.status = "active"
+            # Respect operator override: don't force if they've stopped it.
+            if not self.operator_override:
+                self.rov_state.propulsion.status = "active"
         elif (
             self.mission_state.status == "en_route"
             and self.rov_state.environment.depth_meters >= self.TARGET_DEPTH
         ):
             self.mission_state.status = "searching"
-            self.rov_state.propulsion.status = "inactive"
+            if not self.operator_override:
+                self.rov_state.propulsion.status = "inactive"
             self.scenario_timer = 0
             self._add_log_entry(LogLevel.INFO, "Mission status changed to 'searching'.")
 
@@ -332,6 +366,7 @@ class RovSimulator:
         ):
             self.mission_state.status = "mission_success"
             self.simulation_running = False
+            self.alert = ActiveAlert(active=False)
             self._add_log_entry(LogLevel.INFO, "ROV returned to surface successfully.")
 
     # --- General Physics ---
@@ -339,20 +374,34 @@ class RovSimulator:
     def _update_physics(self):
         """Update depth, pressure, and battery drain each tick."""
         current_depth = self.rov_state.environment.depth_meters
+
+        # --- Autopilot enforcement ---
+        # Ensure propulsion stays on during ascent phases
+        if self.mission_state.status in ["returning", "emergency_ascent"]:
+            self.rov_state.propulsion.status = "active"
+
+        # --- Depth updates ---
         if self.rov_state.propulsion.status == "active":
             if self.mission_state.status in ["en_route", "searching"]:
+                # Descend, but never beyond 150% target depth
                 self.rov_state.environment.depth_meters = min(
-                    self.TARGET_DEPTH * 1.5, current_depth + self.DESCENT_RATE
+                    self.TARGET_DEPTH * 1.5,
+                    current_depth + self.DESCENT_RATE,
                 )
             elif self.mission_state.status in ["returning", "emergency_ascent"]:
+                # Ascend, but never above surface
                 self.rov_state.environment.depth_meters = max(
-                    0, current_depth - self.ASCENT_RATE
+                    0,
+                    current_depth - self.ASCENT_RATE,
                 )
 
+        # --- Pressure updates ---
+        # Always consistent with depth; anomaly "status" may be cleared by override
         self.rov_state.hull_integrity.hull_pressure_kpa = int(
             self.rov_state.environment.depth_meters * self.PRESSURE_PER_METER
         )
 
+        # --- Battery drain ---
         drain_rate = 0.0
         if self.rov_state.power.status == "fault":
             drain_rate = 1.5
@@ -360,5 +409,6 @@ class RovSimulator:
             drain_rate = 0.1
 
         self.rov_state.power.charge_percent = max(
-            0, self.rov_state.power.charge_percent - drain_rate
+            0,
+            self.rov_state.power.charge_percent - drain_rate,
         )

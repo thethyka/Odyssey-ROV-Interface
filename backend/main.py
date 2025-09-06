@@ -13,11 +13,12 @@ simulator = RovSimulator()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.get("/")
 async def read_root():
@@ -42,27 +43,22 @@ async def say_hello():
 
 @app.websocket("/ws/telemetry")
 async def telemetry_ws(ws: WebSocket):
-    """
-    Bi-directional WebSocket for telemetry & operator commands.
-    - Frontend can send JSON commands { "command": ..., "payload": ... }
-    - Backend pushes telemetry snapshots at 1Hz
-    """
     await ws.accept()
     try:
         while True:
-            # Push telemetry
             telemetry = simulator.get_telemetry()
             await ws.send_json(telemetry.model_dump())
 
-            # Non-blocking check for incoming command
             try:
-                msg = await asyncio.wait_for(ws.receive_json(), timeout=1.0)
+                msg = await asyncio.wait_for(
+                    ws.receive_json(), timeout=1.0 / simulator.TICKS_PER_SECOND
+                )
                 simulator.handle_command(msg)
             except asyncio.TimeoutError:
                 pass
 
-            # Advance simulator 1 tick
             simulator.update()
+            await asyncio.sleep(1.0 / simulator.TICKS_PER_SECOND)
 
     except WebSocketDisconnect:
         print("WebSocket disconnected")
