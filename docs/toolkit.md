@@ -3,6 +3,15 @@
 
 This document outlines the technical architecture, data models, communication protocols, and component structure for the Odyssey ROV HMI.
 
+### Developer Quick Start
+
+To get started with the HMI, follow these steps:
+
+1.  **Run the Backend:** Launch the backend service using `docker compose up`. The backend will be available at `localhost:8000`.
+2.  **Connect a WebSocket Client:** Use any tool (e.g., a simple script, Postman) to connect to the WebSocket at `ws://localhost:8000/ws/telemetry`.
+3.  **Observe the Initial State:** You will immediately receive the `'standby'` telemetry message. This is the starting point for the UI.
+4.  **Start a Scenario:** Send a `START_SIMULATION` command (see command table) over the WebSocket to begin receiving live mission data.
+
 ---
 
 ## 1. Data Models (The "Model")
@@ -30,6 +39,7 @@ The entire state of the simulation is defined by a set of Pydantic models. These
 | Model | Attribute | Type | Description |
 | :--- | :--- | :--- | :--- |
 | **Mission State**| `status` | `'standby'` \| `'en_route'` \| `'searching'` \| `'returning'` \| `'mission_success'` \| `'emergency_ascent'` \| `'mission_failure_hull_breach'` \| `'mission_failure_lost_signal'` | The high-level status of the entire mission. |
+| | `operator_override` | `bool` | **True if the operator has manually intervened (e.g., hit "All Stop"), pausing the automated scenario logic.** |
 | **Active Alert**| `active` | `bool` | True if there is any active alert. |
 | | `severity` | `'INFO'` \| `'WARNING'` \| `'CRITICAL'` \| `null` | The severity level of the current alert. |
 | | `message` | `str` \| `null` | The instructional message for the operator. |
@@ -61,7 +71,27 @@ The backend streams a complete state snapshot to all connected clients at a 1Hz 
     "science_package": { "status": "attached" },
     "environment": { "depth_meters": 2015.7, "water_temp_celsius": 2.8 }
   },
-  "mission_state": { "status": "en_route" },
+  "mission_state": { "status": "en_route", "operator_override": false },
+  "alert": { "active": false, "severity": null, "message": null }
+}
+```
+
+**Initial Telemetry Message (`standby` state)**
+
+Before any scenario is started, the backend will stream the following message. This represents the initial state the frontend should expect upon connecting.
+
+```json
+{
+  "timestamp": "2025-09-03T14:29:00Z",
+  "rov_state": {
+    "power": { "charge_percent": 100.0, "status": "discharging" },
+    "propulsion": { "power_level_percent": 0.0, "status": "inactive" },
+    "hull_integrity": { "hull_pressure_kpa": 0, "status": "nominal" },
+    "manipulator_arm": { "status": "stowed", "sample_collected": false },
+    "science_package": { "status": "attached" },
+    "environment": { "depth_meters": 0.0, "water_temp_celsius": 18.0 }
+  },
+  "mission_state": { "status": "standby", "operator_override": false },
   "alert": { "active": false, "severity": null, "message": null }
 }
 ```
@@ -204,5 +234,5 @@ The HMI is a single-screen app with a persistent structure to maintain constant 
   - Implement guarded action UX for irreversible commands.  
   - Manage scenario lifecycle (reset UI to standby when missions end).  
   - Poll mission log via REST until gRPC is available.
-  - **(New) Manage Command Availability**: Intelligently enable/disable action buttons based on the current telemetry to guide the operator and prevent invalid actions.
-  - **(New) Communicate Operator Override**: Clearly indicate when an automated scenario has been manually overridden by the operator (e.g., after pressing "All Stop"). The backend will halt the scenario logic, but the frontend must visually communicate this "manual control" or "paused" state to the user.
+  - **Manage Command Availability**: Intelligently enable/disable action buttons based on the current telemetry to guide the operator and prevent invalid actions.
+  - **Communicate Operator Override**: Clearly indicate when an automated scenario has been manually overridden by the operator by checking the `mission_state.operator_override` flag. The backend will halt the scenario logic, but the frontend must visually communicate this "manual control" or "paused" state to the user.
