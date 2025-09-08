@@ -1,5 +1,5 @@
-import MissionStatusIndicator from "../components/MissionStatusIndicator";
-import MasterAlertIndicator from "../components/MasterAlertIndicator";
+import MissionStatusIndicator from "../features/dashboard/MissionStatusIndicator";
+import MasterAlertIndicator from "../features/alerting/MasterAlertIndicator";
 
 export default function Header() {
     return (

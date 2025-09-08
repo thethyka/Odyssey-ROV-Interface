@@ -1,6 +1,6 @@
 import useRovStore from "../store/rovStore";
-import ScenarioSelector from "../features/MainContent/ScenarioSelector";
-import ViewSwitcher from "../features/MainContent/ViewSwitcher";
+import ScenarioSelector from "../features/rov-systems/ScenarioSelector";
+import ViewSwitcher from "../features/rov-systems/ViewSwitcher";
 
 export default function MainContent() {
     const missionStatus = useRovStore(

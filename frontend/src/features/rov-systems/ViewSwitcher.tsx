@@ -1,6 +1,6 @@
 import { useState } from "react";
 import useRovStore from "../../store/rovStore";
-import Tabs from "./Tabs";
+import Tabs from "./components/Tabs";
 import SystemOverview from "./SystemOverview";
 import SubsystemControls from "./SubsystemControls";
 import type { TabConfig } from "../../types";

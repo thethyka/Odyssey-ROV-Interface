@@ -1,4 +1,4 @@
-import useRovStore from "../store/rovStore";
+import useRovStore from "../../store/rovStore";
 
 export default function LiveAlertFeed() {
     const alert = useRovStore((state) => state.telemetry.alert);
@@ -11,8 +11,8 @@ export default function LiveAlertFeed() {
     };
 
     const formattedTime = timestamp
-    ? new Date(timestamp).toISOString().replace("T", " ").split(".")[0]
-    : "";
+        ? new Date(timestamp).toISOString().replace("T", " ").split(".")[0]
+        : "";
 
     const colorClass = alert?.severity ? severityColorMap[alert.severity] : "";
 

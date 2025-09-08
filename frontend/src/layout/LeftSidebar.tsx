@@ -1,5 +1,5 @@
-import KeyReadoutPanel from "../components/KeyReadoutPanel";
-import LiveAlertFeed from "../components/LiveAlertFeed";
+import KeyReadoutPanel from "../features/dashboard/KeyReadoutPanel";
+import LiveAlertFeed from "../features/alerting/LiveAlertFeed";
 
 export default function LeftSidebar() {
     return (

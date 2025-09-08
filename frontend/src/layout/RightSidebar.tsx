@@ -1,4 +1,4 @@
-import MissionLogButton from "../components/MissionLogButton";
+import MissionLogButton from "../features/mission-control/MissionLogButton";
 
 export default function RightSidebar() {
     return (

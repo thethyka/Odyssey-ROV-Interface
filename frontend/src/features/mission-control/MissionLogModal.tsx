@@ -57,9 +57,9 @@ export default function MissionLogModal({ onClose }: { onClose: () => void }) {
 
                 {/* Content */}
                 {loading ? (
-                    <p className="text-text-secondary">Loading...</p>
+                    <p className="text-text-secondary font-sans">Loading...</p>
                 ) : entries.length === 0 ? (
-                    <p className="text-text-secondary">
+                    <p className="text-text-secondary font-sans">
                         No log entries available.
                     </p>
                 ) : (

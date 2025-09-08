@@ -12,8 +12,8 @@ import type { Node, Edge } from "reactflow";
 import "reactflow/dist/style.css";
 
 import useRovStore from "../../store/rovStore";
-import SystemNode from "../../components/SystemNode";
-import type { SystemNodeData } from "../../components/SystemNode";
+import SystemNode from "./components/SystemNode";
+import type { SystemNodeData } from "./components/SystemNode";
 import {
     BatteryChargingVerticalIcon,
     GaugeIcon,
@@ -200,10 +200,6 @@ const FlowDiagram = () => {
         const updatedEdges = initialEdges.map((edge) => {
             const sourceNode = updatedNodes.find((n) => n.id === edge.source);
             const sourceStatus = sourceNode?.data.status || "default";
-
-            const isPropulsionEdge = edge.target === "propulsion";
-            const isPropulsionActive = rov_state.propulsion.status === "active";
-
             return {
                 ...edge,
                 animated: false,
@@ -216,7 +212,6 @@ const FlowDiagram = () => {
             };
         });
 
-        // The "WOW" moment for the power fault scenario
         if (rov_state.science_package.status === "jettisoned") {
             setNodes(updatedNodes.filter((n) => n.id !== "science-package"));
             setEdges(

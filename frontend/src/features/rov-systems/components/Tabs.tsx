@@ -1,4 +1,4 @@
-import type { TabConfig } from "../../types";
+import type { TabConfig } from "../../../types";
 
 type TabsProps = {
     tabs: TabConfig[];

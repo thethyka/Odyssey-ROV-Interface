@@ -1,10 +1,9 @@
-import useRovStore from "../store/rovStore";
+import useRovStore from "../../store/rovStore";
 
 export default function KeyReadoutPanel() {
     const telemetry = useRovStore((state) => state.telemetry);
 
-    const { depth_meters } =
-        telemetry.rov_state.environment;
+    const { depth_meters } = telemetry.rov_state.environment;
     const { charge_percent } = telemetry.rov_state.power;
     const { hull_pressure_kpa } = telemetry.rov_state.hull_integrity;
 

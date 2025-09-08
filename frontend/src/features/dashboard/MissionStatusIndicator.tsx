@@ -1,4 +1,4 @@
-import useRovStore from "../store/rovStore";
+import useRovStore from "../../store/rovStore";
 
 export default function MissionStatusIndicator() {
     const missionStatus = useRovStore(
