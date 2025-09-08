@@ -111,7 +111,7 @@ const FlowDiagram = () => {
                     data = {
                         label: "Main Bus",
                         icon: GearIcon,
-                        // FIX #1 (applied here too): Inherit the translated status from the power system.
+                        // The main bus inherits its status from the power system because its operation depends on the power system's health.
                         status:
                             rov_state.power.status === "fault"
                                 ? "critical"
