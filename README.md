@@ -32,6 +32,13 @@ odyssey-rov-hmi/
 
 ---
 
+## 🖼️ Screenshots
+
+![Odyssey ROV HMI Screenshot](docs/assets/v1screenshot.png)
+
+---
+
+
 ## 🔑 Backend
 
 The backend simulates the ROV's state and environment. It streams real-time telemetry (depth, power, system status) to the frontend via WebSockets and serves historical data on demand via a gRPC service.

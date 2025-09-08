@@ -38,7 +38,7 @@ class RovSimulator:
     PRESSURE_CRITICAL_THRESHOLD = TARGET_DEPTH * PRESSURE_PER_METER * 1.2
 
     # Ticks-per-second (used by the websocket loop)
-    TICKS_PER_SECOND = 1
+    TICKS_PER_SECOND = 5
 
     def __init__(self):
         self.active_scenario: Optional[str] = None
@@ -117,7 +117,7 @@ class RovSimulator:
                     LogLevel.OPERATOR, "Command Sent: JETTISON_PACKAGE."
                 )
                 self._handle_jettison_package()
-            case "RESET_SIMULATION": 
+            case "RESET_SIMULATION":
                 self._reset_state()
                 self._add_log_entry(LogLevel.INFO, "Simulation reset to standby.")
             case _:
