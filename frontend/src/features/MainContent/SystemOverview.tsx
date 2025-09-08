@@ -73,10 +73,11 @@ const initialEdges: Edge[] = [
 
 // Map status to edge colors from your style guide
 const statusEdgeColors: Record<string, string> = {
-    nominal: "#34D399",
+    success: "#34D399",
     warning: "#FBBF24",
     critical: "#F87171",
     fault: "#F87171",
+    info: "#60A5FA",
     default: "#374151",
 };
 
@@ -146,12 +147,13 @@ const FlowDiagram = () => {
                     data = {
                         label: "Manipulator",
                         icon: ScrewdriverIcon,
-                        status:
-                            rov_state.manipulator_arm.status === "stowed"
-                                ? "inactive"
-                                : rov_state.manipulator_arm.sample_collected
-                                ? "info"
-                                : "nominal",
+                        status: rov_state.manipulator_arm.sample_collected
+                            ? "success"
+                            : telemetry.alert.severity === "INFO"
+                            ? "info"
+                            : rov_state.manipulator_arm.status === "stowed"
+                            ? "inactive"
+                            : "default",
                         value: rov_state.manipulator_arm.sample_collected
                             ? "Sample Stored"
                             : rov_state.manipulator_arm.status,
@@ -162,14 +164,37 @@ const FlowDiagram = () => {
                         label: "Science Package",
                         icon: CubeIcon,
                         status:
-                            rov_state.science_package.status === "attached"
-                                ? "nominal"
-                                : "critical",
+                            rov_state.science_package.status === "jettisoned"
+                                ? "success" // green when operator saves the ROV
+                                : telemetry.alert.severity === "CRITICAL"
+                                ? "critical" // red if power fault is active
+                                : "default", // neutral grey otherwise
                         value: rov_state.science_package.status,
                     };
                     break;
             }
             return { ...node, data };
+        });
+
+        updatedNodes.forEach((n) => {
+            if (n.id === "ms") {
+                // Mission node reflects global scenario outcome
+                if (telemetry.mission_state.status === "mission_success") {
+                    n.data.status = "success"; // green border only on success
+                } else if (
+                    telemetry.mission_state.status.startsWith("mission_failure")
+                ) {
+                    n.data.status = "critical"; // red border on any failure
+                } else if (telemetry.alert.severity === "INFO") {
+                    n.data.status = "info"; // blue border when info event is active
+                } else if (telemetry.alert.severity === "WARNING") {
+                    n.data.status = "warning"; // yellow border if warning
+                } else if (telemetry.alert.severity === "CRITICAL") {
+                    n.data.status = "critical"; // red border if critical
+                } else {
+                    n.data.status = "default"; // neutral grey baseline
+                }
+            }
         });
 
         const updatedEdges = initialEdges.map((edge) => {
@@ -181,7 +206,7 @@ const FlowDiagram = () => {
 
             return {
                 ...edge,
-                animated: isPropulsionEdge && isPropulsionActive,
+                animated: false,
                 style: {
                     stroke:
                         statusEdgeColors[sourceStatus] ||

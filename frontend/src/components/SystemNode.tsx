@@ -5,7 +5,7 @@ import { Handle, Position } from "reactflow";
 import type { Icon } from "@phosphor-icons/react";
 
 // This type definition is correct. We will ensure the data we pass matches it.
-type NodeStatus = "nominal" | "warning" | "critical" | "fault" | "inactive" | "info" | null;
+type NodeStatus = "nominal" | "warning" | "critical" | "fault" | "inactive" | "info" | "success" | "default" |  null;
 
 export interface SystemNodeData {
   label: string;
@@ -15,7 +15,7 @@ export interface SystemNodeData {
 }
 
 const statusBorderColors: Record<string, string> = {
-    nominal: "border-nominal",
+    success: "border-nominal",
     warning: "border-warning",
     critical: "border-critical",
     fault: "border-critical",
