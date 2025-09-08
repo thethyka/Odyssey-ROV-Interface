@@ -35,12 +35,17 @@ export type JettisonPackageCommand = {
     command: "JETTISON_PACKAGE";
 };
 
+export type ResetCommand = {
+    command: "RESET_SIMULATION";
+};
+
 export type RovCommand =
     | StartSimulationCommand
     | SetPropulsionStateCommand
     | DeployArmCommand
     | CollectSampleCommand
-    | JettisonPackageCommand;
+    | JettisonPackageCommand
+    | ResetCommand;
 
 export interface RovStoreState {
     telemetry: TelemetryMessage;
