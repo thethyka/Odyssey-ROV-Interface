@@ -38,7 +38,7 @@ class RovSimulator:
     PRESSURE_CRITICAL_THRESHOLD = TARGET_DEPTH * PRESSURE_PER_METER * 1.2
 
     # Ticks-per-second (used by the websocket loop)
-    TICKS_PER_SECOND = 5
+    TICKS_PER_SECOND = 4
 
     def __init__(self):
         self.active_scenario: Optional[str] = None

@@ -37,6 +37,6 @@ body {
 }
 
 .animate-flash {
-  animation: flash 1s infinite;
+  animation: flash 1.5s 3;
 }
 
