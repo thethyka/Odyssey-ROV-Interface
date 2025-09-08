@@ -2,11 +2,11 @@
 
 import { useEffect } from "react";
 import useRovStore from "../store/rovStore";
-import type { TelemetryMessage } from "../types";
+import type { RovCommand, TelemetryMessage } from "../types";
 
 export const useTelemetry = () => {
     const updateTelemetry = useRovStore((state) => state.updateTelemetry);
-    const telemetry = useRovStore((state) => state);
+    const setSendCommand = useRovStore((state) => state.setSendCommand);
 
     useEffect(() => {
         console.log("Attempting to connect...");
@@ -15,13 +15,23 @@ export const useTelemetry = () => {
 
         ws.onopen = () => {
             console.log("Websocket connection established");
+
+            setSendCommand((command: RovCommand) => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify(command));
+                } else {
+                    console.error(
+                        "WebSocket is not open. Cannot send command."
+                    );
+                }
+            });
         };
 
         ws.onmessage = (event) => {
             const message: TelemetryMessage = JSON.parse(event.data);
             console.log(message);
             updateTelemetry(message);
-            console.log(telemetry);
+            console.log(useRovStore.getState());
         };
 
         ws.onclose = () => {

@@ -1,14 +1,15 @@
 @import "tailwindcss";
-  
-* {
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
-  padding: 0;
-  margin: 0;
 }
 
 @theme {
   --color-background: #111827;
   --color-surface: #1F2937;
+  --color-component: #374151;
   --color-text-primary: #F3F4F6;
   --color-text-secondary: #9CA3AF;
   --color-border: #374151;
@@ -27,5 +28,15 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+@keyframes flash {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.animate-flash {
+  animation: flash 1s infinite;
 }
 

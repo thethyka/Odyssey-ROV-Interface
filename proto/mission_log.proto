@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+service MissionLogService {
+  rpc GetMissionLog(GetMissionLogRequest) returns (GetMissionLogResponse);
+}
+
+message GetMissionLogRequest {}
+
+message GetMissionLogResponse {
+  repeated LogEntry entries = 1;
+}
+
+message LogEntry {
+  enum LogLevel {
+    INFO = 0;      // System milestones
+    WARNING = 1;   // Warnings
+    CRITICAL = 2;  // Critical failures
+    OPERATOR = 3;  // User-initiated commands
+  }
+
+  string timestamp = 1;
+  LogLevel level = 2;
+  string message = 3;
+}
