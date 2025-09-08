@@ -173,8 +173,6 @@ The HMI is a single-screen app with a persistent structure to maintain constant 
     - WARNING → Yellow  
     - CRITICAL → Red  
   - **Flashing behavior**: When severity is `WARNING` or `CRITICAL`, the banner should flash to draw attention.
-  - **Note for Frontend**: A state can change very quickly (e.g., from WARNING to CRITICAL, then back to NOMINAL after an operator action). The frontend should handle these rapid transitions gracefully to avoid a jarring or confusing user experience.
-
 ---
 
 #### B. Sidebar: Critical Readouts & Alerts

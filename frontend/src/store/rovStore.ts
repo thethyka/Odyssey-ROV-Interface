@@ -1,14 +1,6 @@
-// src/store/rovStore.ts
-
 import { create } from "zustand";
-import type { TelemetryMessage } from "../types";
+import type { TelemetryMessage, RovStoreState } from "../types";
 
-export interface RovStoreState {
-    telemetry: TelemetryMessage;
-    updateTelemetry: (newTelemetry: TelemetryMessage) => void;
-}
-
-// Initial telemetry state
 const initialState: TelemetryMessage = {
     timestamp: new Date().toISOString(),
     rov_state: {
@@ -26,6 +18,14 @@ const initialState: TelemetryMessage = {
 const useRovStore = create<RovStoreState>((set) => ({
     telemetry: initialState,
     updateTelemetry: (newTelemetry) => set({ telemetry: newTelemetry }),
+    sendCommand: () => {
+        console.log("No ws connected yet!");
+    },
+    setSendCommand: (sendCommandFn) =>
+        set((state) => ({
+            ...state,
+            sendCommand: sendCommandFn,
+        })),
 }));
 
 export default useRovStore;

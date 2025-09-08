@@ -9,9 +9,49 @@ export type TabConfig = {
     component: ReactNode;
 };
 
+export type StartSimulationCommand = {
+    command: "START_SIMULATION";
+    payload: {
+        scenario: "nominal" | "pressure_anomaly" | "power_fault";
+    };
+};
+
+export type SetPropulsionStateCommand = {
+    command: "SET_PROPULSION_STATE";
+    payload: {
+        status: "active" | "inactive";
+    };
+};
+
+export type DeployArmCommand = {
+    command: "DEPLOY_ARM";
+};
+
+export type CollectSampleCommand = {
+    command: "COLLECT_SAMPLE";
+};
+
+export type JettisonPackageCommand = {
+    command: "JETTISON_PACKAGE";
+};
+
+export type ResetCommand = {
+    command: "RESET_SIMULATION";
+};
+
+export type RovCommand =
+    | StartSimulationCommand
+    | SetPropulsionStateCommand
+    | DeployArmCommand
+    | CollectSampleCommand
+    | JettisonPackageCommand
+    | ResetCommand;
+
 export interface RovStoreState {
     telemetry: TelemetryMessage;
     updateTelemetry: (newTelemetry: TelemetryMessage) => void;
+    sendCommand: (command: RovCommand) => void;
+    setSendCommand: (sendCommandFn: (command: RovCommand) => void) => void;
 }
 
 export interface TelemetryMessage {

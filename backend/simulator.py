@@ -117,6 +117,9 @@ class RovSimulator:
                     LogLevel.OPERATOR, "Command Sent: JETTISON_PACKAGE."
                 )
                 self._handle_jettison_package()
+            case "RESET_SIMULATION": 
+                self._reset_state()
+                self._add_log_entry(LogLevel.INFO, "Simulation reset to standby.")
             case _:
                 self._add_log_entry(
                     LogLevel.WARNING, f"Unknown command: {command_name}"
@@ -400,13 +403,17 @@ class RovSimulator:
         self.rov_state.hull_integrity.hull_pressure_kpa = int(
             self.rov_state.environment.depth_meters * self.PRESSURE_PER_METER
         )
+        if self.rov_state.propulsion.status == "active":
+            self.rov_state.propulsion.power_level_percent = 75.0  # some nominal thrust
+        else:
+            self.rov_state.propulsion.power_level_percent = 0.0
 
         # --- Battery drain ---
-        drain_rate = 0.0
+        drain_rate = 0.01
         if self.rov_state.power.status == "fault":
-            drain_rate = 1.5
+            drain_rate += 1.5
         elif self.rov_state.propulsion.status == "active":
-            drain_rate = 0.1
+            drain_rate += 0.1
 
         self.rov_state.power.charge_percent = max(
             0,
