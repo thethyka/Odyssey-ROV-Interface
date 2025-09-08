@@ -13,8 +13,10 @@ export default function MissionLogModal({ onClose }: { onClose: () => void }) {
     useEffect(() => {
         async function fetchLogs() {
             try {
-                // 🔒 Hardcoded endpoint
-                const res = await fetch("http://localhost:8000/mission-log");
+                const apiUrl = `${
+                    import.meta.env.VITE_API_BASE_URL
+                }/mission-log`;
+                const res = await fetch(apiUrl);
                 if (!res.ok) {
                     throw new Error(`HTTP error! status: ${res.status}`);
                 }
