@@ -1,9 +1,11 @@
+import SubsystemCard from "./components/SubsystemCard";
+
 export default function SubsystemControls() {
     return (
-        <div className="w-full h-full bg-background flex items-center justify-center">
-            <p className="text-text-primary font-sans">
-                Subsystem Controls Placeholder
-            </p>
+        <div className="w-full h-full bg-background flex items-center px-5 gap-5">
+            <SubsystemCard id="propulsion" />
+            <SubsystemCard id="manipulator" />
+            <SubsystemCard id="science-package" />
         </div>
     );
 }

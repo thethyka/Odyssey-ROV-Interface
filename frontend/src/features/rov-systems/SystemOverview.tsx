@@ -221,7 +221,7 @@ const FlowDiagram = () => {
             setNodes(updatedNodes);
             setEdges(updatedEdges);
         }
-    }, [telemetry, setNodes, setEdges]); // End of useEffect
+    }, [telemetry]); 
 
     return (
         <ReactFlow

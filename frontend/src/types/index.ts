@@ -117,3 +117,8 @@ export interface ActiveAlert {
     severity: "INFO" | "WARNING" | "CRITICAL" | null;
     message: string | null;
 }
+
+
+export interface SubsystemCardProps {
+    name?: string
+}
