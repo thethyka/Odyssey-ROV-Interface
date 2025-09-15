@@ -165,7 +165,7 @@ const FlowDiagram = () => {
                         icon: CubeIcon,
                         status:
                             rov_state.science_package.status === "jettisoned"
-                                ? "success" // green when operator saves the ROV
+                                ? "nominal" // green when operator saves the ROV
                                 : telemetry.alert.severity === "CRITICAL"
                                 ? "critical" // red if power fault is active
                                 : "default", // neutral grey otherwise
@@ -212,16 +212,9 @@ const FlowDiagram = () => {
             };
         });
 
-        if (rov_state.science_package.status === "jettisoned") {
-            setNodes(updatedNodes.filter((n) => n.id !== "science-package"));
-            setEdges(
-                updatedEdges.filter((e) => e.target !== "science-package")
-            );
-        } else {
-            setNodes(updatedNodes);
-            setEdges(updatedEdges);
-        }
-    }, [telemetry]); 
+        setNodes(updatedNodes);
+        setEdges(updatedEdges);
+    }, [telemetry]);
 
     return (
         <ReactFlow
