@@ -38,7 +38,7 @@ class RovSimulator:
     PRESSURE_CRITICAL_THRESHOLD = TARGET_DEPTH * PRESSURE_PER_METER * 1.2
 
     # Ticks-per-second (used by the websocket loop)
-    TICKS_PER_SECOND = 4
+    TICKS_PER_SECOND = 2
 
     def __init__(self):
         self.active_scenario: Optional[str] = None
@@ -48,6 +48,8 @@ class RovSimulator:
         self.operator_override: bool = (
             False  # set when operator issues a propulsion command
         )
+        self.pressure_normalization_target: Optional[float] = None
+        self.pressure_normalization_ticks: int = 0
         self._reset_state()
 
     # --- Setup & Logging ---
@@ -69,6 +71,8 @@ class RovSimulator:
         self.simulation_running = False
         self.mission_log = []
         self.operator_override = False
+        self.pressure_normalization_target = None
+        self.pressure_normalization_ticks = 0
 
     def _add_log_entry(self, level: LogLevel, message: str):
         """Record a new mission log entry."""
@@ -172,6 +176,20 @@ class RovSimulator:
                 self.scenario_timer = 0
                 self._add_log_entry(LogLevel.INFO, "Hull pressure returned to nominal.")
                 self._add_log_entry(LogLevel.INFO, "Operator intervention successful.")
+
+                # FIX 1: Kick off the pressure normalization effect over 5 ticks.
+                self.pressure_normalization_target = (
+                    self.rov_state.environment.depth_meters * self.PRESSURE_PER_METER
+                )
+                self.pressure_normalization_ticks = 5  # Decrease over 5 ticks
+
+                # FIX 2 (from previous step): Transition to the nominal searching phase.
+                self.active_scenario = "nominal"
+                self.mission_state.status = "searching"
+                self._add_log_entry(
+                    LogLevel.INFO,
+                    "Anomaly resolved. Resuming mission: searching for sample.",
+                )
 
     def _handle_deploy_arm(self):
         if self.rov_state.manipulator_arm.status == "stowed":
@@ -400,20 +418,37 @@ class RovSimulator:
 
         # --- Pressure updates ---
         # Always consistent with depth; anomaly "status" may be cleared by override
-        self.rov_state.hull_integrity.hull_pressure_kpa = int(
-            self.rov_state.environment.depth_meters * self.PRESSURE_PER_METER
-        )
+        if self.pressure_normalization_ticks > 0:
+            current_pressure = self.rov_state.hull_integrity.hull_pressure_kpa
+            # Calculate the amount to decrease in this step
+            step = (
+                current_pressure - self.pressure_normalization_target
+            ) / self.pressure_normalization_ticks
+            self.rov_state.hull_integrity.hull_pressure_kpa -= step
+            self.pressure_normalization_ticks -= 1
+            # When finished, snap to the exact target to avoid float errors
+            if self.pressure_normalization_ticks == 0:
+                self.rov_state.hull_integrity.hull_pressure_kpa = int(
+                    self.pressure_normalization_target
+                )
+                self.pressure_normalization_target = None  # Clean up
+        else:
+            # Original behavior: pressure is always consistent with depth
+            self.rov_state.hull_integrity.hull_pressure_kpa = int(
+                self.rov_state.environment.depth_meters * self.PRESSURE_PER_METER
+            )
+
         if self.rov_state.propulsion.status == "active":
             self.rov_state.propulsion.power_level_percent = 75.0  # some nominal thrust
         else:
             self.rov_state.propulsion.power_level_percent = 0.0
 
         # --- Battery drain ---
-        drain_rate = 0.01
+        drain_rate = 0.03
         if self.rov_state.power.status == "fault":
             drain_rate += 1.5
         elif self.rov_state.propulsion.status == "active":
-            drain_rate += 0.1
+            drain_rate += 0.3
 
         self.rov_state.power.charge_percent = max(
             0,
