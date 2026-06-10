@@ -1,0 +1,22 @@
+# Fly.io app configuration for the Odyssey ROV backend.
+#
+# Deploys are run from CI via `fly deploy --config backend/fly.toml`
+# (see .github/workflows/deploy.yml), which requires a FLY_API_TOKEN repo secret.
+#
+# Lives alongside the Dockerfile so the build context/dockerfile defaults
+# (this directory) match what backend/Dockerfile expects.
+
+app = "odyssey-rov-backend"
+primary_region = "lhr"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
