@@ -1,12 +1,23 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
-import asyncio
 
 from .simulator import RovSimulator
 from .logs import LogEntry
+from .simulation_manager import SimulationManager, TooManySessionsError
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.sim_manager = SimulationManager()
+    yield
+    for session_id in list(app.state.sim_manager._sessions):
+        await app.state.sim_manager.destroy_session(session_id)
+
+
+app = FastAPI(lifespan=lifespan)
 simulator = RovSimulator()
 
 app.add_middleware(
@@ -30,7 +41,12 @@ async def health():
 
 @app.get("/mission-log", response_model=List[LogEntry])
 async def get_mission_log():
-    """Expose mission log over REST (for demo until gRPC is wired)."""
+    """Expose mission log over REST (for demo until gRPC is wired).
+
+    TODO(#27): now disconnected from real sessions since each websocket
+    connection has its own RovSimulator (see simulation_manager.py). This
+    always returns []. Needs a session-scoped redesign.
+    """
     return simulator.get_mission_log()
 
 
@@ -42,23 +58,20 @@ async def say_hello():
 @app.websocket("/ws/telemetry")
 async def telemetry_ws(ws: WebSocket):
     await ws.accept()
+    sim_manager: SimulationManager = ws.app.state.sim_manager
+
+    try:
+        session = await sim_manager.create_session(ws)
+    except TooManySessionsError:
+        await ws.close(code=1013, reason="Server at capacity")
+        return
+
     try:
         while True:
-            telemetry = simulator.get_telemetry()
-            await ws.send_json(telemetry.model_dump())
-
-            try:
-                msg = await asyncio.wait_for(
-                    ws.receive_json(), timeout=1.0 / simulator.TICKS_PER_SECOND
-                )
-                simulator.handle_command(msg)
-            except asyncio.TimeoutError:
-                pass
-
-            simulator.update()
-            await asyncio.sleep(1.0 / simulator.TICKS_PER_SECOND)
-
+            msg = await ws.receive_json()
+            await session.command_queue.put(msg)
     except WebSocketDisconnect:
         print("WebSocket disconnected")
     finally:
+        await sim_manager.destroy_session(session.session_id)
         await ws.close()
