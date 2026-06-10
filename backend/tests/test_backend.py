@@ -1,21 +1,41 @@
 # backend/tests/test_backend.py
-import math
+import time
+
 import pytest
+from fastapi import WebSocketDisconnect
 from fastapi.testclient import TestClient
-from backend.main import app, simulator
 
-client = TestClient(app)
+from backend.main import app
+from backend.simulator import RovSimulator
+from backend.simulation_manager import SimulationManager
 
 
-# ---------- Helpers ----------
+# ---------- Fixtures ----------
+
+
+@pytest.fixture
+def client():
+    """TestClient as a context manager so FastAPI's lifespan (and therefore
+    app.state.sim_manager) actually starts up/shuts down for each test."""
+    with TestClient(app) as c:
+        yield c
 
 
 @pytest.fixture(autouse=True)
 def fast_mode():
-    """Run simulator at high tick rate for tests."""
-    simulator.TICKS_PER_SECOND = 200  # high frequency for speed
+    """Run every session's simulator at high tick rate for fast tests.
+
+    TICKS_PER_SECOND lives on the RovSimulator class, and each websocket
+    session now creates its own instance, so we patch the class attribute
+    rather than a single shared instance.
+    """
+    original = RovSimulator.TICKS_PER_SECOND
+    RovSimulator.TICKS_PER_SECOND = 200
     yield
-    simulator.TICKS_PER_SECOND = 1  # reset after test
+    RovSimulator.TICKS_PER_SECOND = original
+
+
+# ---------- Helpers ----------
 
 
 def _recv_until(ws, condition, max_steps=2000):
@@ -39,10 +59,21 @@ def _recv_n(ws, n):
     return last
 
 
+def _only_session_simulator(client):
+    """Grab the RovSimulator for the (single) currently active session.
+
+    Must be called while the websocket connection is still open --
+    destroy_session removes the session from the manager on disconnect.
+    """
+    sessions = list(client.app.state.sim_manager._sessions.values())
+    assert len(sessions) == 1
+    return sessions[0].simulator
+
+
 # ---------- REST TESTS ----------
 
 
-def test_root_and_healthz():
+def test_root_and_healthz(client):
     resp = client.get("/")
     assert resp.status_code == 200
     assert "Odyssey ROV Backend" in resp.json()["message"]
@@ -52,20 +83,19 @@ def test_root_and_healthz():
     assert resp.json()["status"] == "ok"
 
 
-def test_hello():
+def test_hello(client):
     resp = client.get("/hello")
     assert resp.status_code == 200
     assert resp.json() == {"message": "Hello from FastAPI backend!"}
 
 
-def test_mission_log_empty_start():
+def test_mission_log_empty_start(client):
     resp = client.get("/mission-log")
     assert resp.status_code == 200
     assert resp.json() == []
 
 
-def test_mission_log_after_command():
-    simulator._reset_state()
+def test_mission_log_after_command(client):
     with client.websocket_connect("/ws/telemetry") as ws:
         ws.receive_json()  # initial telemetry
         ws.send_json(
@@ -73,7 +103,9 @@ def test_mission_log_after_command():
         )
         ws.receive_json()  # updated telemetry
 
-    logs = simulator.get_mission_log()
+        sim = _only_session_simulator(client)
+
+    logs = sim.get_mission_log()
     assert any("Scenario Started" in log.message for log in logs)
     assert any("Mission status changed to 'en_route'" in log.message for log in logs)
 
@@ -81,8 +113,7 @@ def test_mission_log_after_command():
 # ---------- WEBSOCKET TESTS ----------
 
 
-def test_nominal_mission_success():
-    simulator._reset_state()
+def test_nominal_mission_success(client):
     with client.websocket_connect("/ws/telemetry") as ws:
         ws.receive_json()
         ws.send_json(
@@ -110,8 +141,7 @@ def test_nominal_mission_success():
         assert result["mission_state"]["status"] == "mission_success"
 
 
-def test_pressure_anomaly_failure_path():
-    simulator._reset_state()
+def test_pressure_anomaly_failure_path(client):
     with client.websocket_connect("/ws/telemetry") as ws:
         ws.receive_json()
         ws.send_json(
@@ -126,8 +156,7 @@ def test_pressure_anomaly_failure_path():
         assert result["mission_state"]["status"] == "mission_failure_hull_breach"
 
 
-def test_power_fault_failure_path():
-    simulator._reset_state()
+def test_power_fault_failure_path(client):
     with client.websocket_connect("/ws/telemetry") as ws:
         ws.receive_json()
         ws.send_json(
@@ -142,14 +171,13 @@ def test_power_fault_failure_path():
         assert result["mission_state"]["status"] == "mission_failure_lost_signal"
 
 
-def test_pressure_anomaly_success_path_all_stop_no_snap_no_escalation():
+def test_pressure_anomaly_success_path_all_stop_no_snap_no_escalation(client):
     """
     Operator intervenes with All-Stop after WARNING.
     - Hull returns to nominal and alert clears
     - Depth does NOT 'snap' downward
     - Scenario no longer escalates to CRITICAL / failure
     """
-    simulator._reset_state()
     with client.websocket_connect("/ws/telemetry") as ws:
         ws.receive_json()
         ws.send_json(
@@ -185,12 +213,11 @@ def test_pressure_anomaly_success_path_all_stop_no_snap_no_escalation():
             assert frame["mission_state"]["status"] != "mission_failure_hull_breach"
 
 
-def test_nominal_operator_override_respected_during_descent():
+def test_nominal_operator_override_respected_during_descent(client):
     """
     If an operator sends All-Stop during nominal descent,
     scenario logic must NOT force propulsion back on.
     """
-    simulator._reset_state()
     with client.websocket_connect("/ws/telemetry") as ws:
         ws.receive_json()
         ws.send_json(
@@ -216,8 +243,7 @@ def test_nominal_operator_override_respected_during_descent():
         assert after["mission_state"]["status"] == "en_route"
 
 
-def test_power_fault_success_path_jettison():
-    simulator._reset_state()
+def test_power_fault_success_path_jettison(client):
     with client.websocket_connect("/ws/telemetry") as ws:
         ws.receive_json()
         ws.send_json(
@@ -242,8 +268,7 @@ def test_power_fault_success_path_jettison():
         assert final["mission_state"]["status"] == "mission_success"
 
 
-def test_nominal_mission_alert_and_log_entries():
-    simulator._reset_state()
+def test_nominal_mission_alert_and_log_entries(client):
     with client.websocket_connect("/ws/telemetry") as ws:
         ws.receive_json()
         ws.send_json(
@@ -255,38 +280,111 @@ def test_nominal_mission_alert_and_log_entries():
         )
         assert telemetry["alert"]["message"].startswith("Bioluminescent signature")
 
-    logs = simulator.get_mission_log()
+        sim = _only_session_simulator(client)
+
+    logs = sim.get_mission_log()
     assert any("Scenario Started" in log.message for log in logs)
     assert any("Bioluminescent signature detected" in log.message for log in logs)
 
 
-def test_invalid_command_is_logged():
-    simulator._reset_state()
+def test_invalid_command_is_logged(client):
     with client.websocket_connect("/ws/telemetry") as ws:
         ws.receive_json()
         ws.send_json({"command": "FOO_BAR", "payload": {}})
         ws.receive_json()
 
-    logs = simulator.get_mission_log()
+        sim = _only_session_simulator(client)
+
+    logs = sim.get_mission_log()
     assert any("Unknown command" in log.message for log in logs)
 
 
-def test_multiple_clients_receive_same_telemetry():
-    simulator._reset_state()
+# ---------- SESSION ISOLATION TESTS (T1-1) ----------
+
+
+def test_each_connection_gets_an_isolated_simulator(client):
+    """Two tabs open: each runs its own scenario, neither affects the other."""
     with client.websocket_connect("/ws/telemetry") as ws1, client.websocket_connect(
         "/ws/telemetry"
     ) as ws2:
         ws1.receive_json()
         ws2.receive_json()
+
+        assert client.app.state.sim_manager.active_session_count == 2
+
+        # Only ws1 starts its mission
         ws1.send_json(
             {"command": "START_SIMULATION", "payload": {"scenario": "nominal"}}
         )
+        t1 = _recv_until(ws1, lambda d: d["mission_state"]["status"] == "en_route")
+        assert t1["rov_state"]["environment"]["depth_meters"] > 0
 
-        t1 = _recv_until(
-            ws1, lambda d: d["mission_state"]["status"] == "searching", max_steps=1000
+        # ws2 never received START_SIMULATION -- must remain in standby,
+        # at depth 0, completely unaffected by ws1's progress.
+        t2 = ws2.receive_json()
+        assert t2["mission_state"]["status"] == "standby"
+        assert t2["rov_state"]["environment"]["depth_meters"] == 0
+
+    # Both sessions cleaned up on disconnect
+    assert client.app.state.sim_manager.active_session_count == 0
+
+
+def test_two_concurrent_sessions_each_tick_at_one_x_speed(client):
+    """The original bug: N clients caused N updates per real tick.
+
+    With two sessions running simultaneously, ws1's depth must still advance
+    by exactly DESCENT_RATE per *received frame* -- not 2x DESCENT_RATE,
+    which is what a shared simulator would produce.
+    """
+    DESCENT_RATE = 25.0  # RovSimulator.DESCENT_RATE
+
+    with client.websocket_connect("/ws/telemetry") as ws1, client.websocket_connect(
+        "/ws/telemetry"
+    ) as ws2:
+        ws1.receive_json()
+        ws2.receive_json()
+
+        ws1.send_json(
+            {"command": "START_SIMULATION", "payload": {"scenario": "nominal"}}
         )
-        t2 = _recv_until(
-            ws2, lambda d: d["mission_state"]["status"] == "searching", max_steps=1000
+        ws2.send_json(
+            {"command": "START_SIMULATION", "payload": {"scenario": "nominal"}}
         )
 
-        assert t1["mission_state"]["status"] == t2["mission_state"]["status"]
+        prev_depth = ws1.receive_json()["rov_state"]["environment"]["depth_meters"]
+        for _ in range(10):
+            depth = ws1.receive_json()["rov_state"]["environment"]["depth_meters"]
+            assert depth - prev_depth == pytest.approx(DESCENT_RATE)
+            prev_depth = depth
+
+
+def test_session_task_cancelled_on_disconnect(client):
+    with client.websocket_connect("/ws/telemetry") as ws:
+        ws.receive_json()
+        session = next(iter(client.app.state.sim_manager._sessions.values()))
+        task = session.task
+
+    # task.cancel() only requests cancellation; give the event loop a moment
+    # to actually process it.
+    for _ in range(50):
+        if task.done():
+            break
+        time.sleep(0.01)
+
+    # _run_loop catches CancelledError to exit gracefully, so the task
+    # finishes normally (done=True, cancelled=False) rather than ending
+    # in the "cancelled" state -- that's the correct, clean shutdown.
+    assert task.done()
+    assert task.exception() is None
+
+
+def test_server_rejects_connections_beyond_max_sessions(client, monkeypatch):
+    monkeypatch.setattr(SimulationManager, "MAX_CONCURRENT_SESSIONS", 1)
+
+    with client.websocket_connect("/ws/telemetry") as ws1:
+        ws1.receive_json()
+        assert client.app.state.sim_manager.active_session_count == 1
+
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect("/ws/telemetry") as ws2:
+                ws2.receive_json()

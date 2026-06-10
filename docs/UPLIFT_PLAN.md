@@ -17,14 +17,15 @@
 
 ### What screams "FE engineer bolted on a backend"
 - **N-client speed bug**: `simulator.update()` is called inside each client's WS handler — 2 clients = 2x simulation speed
-- **No ConnectionManager**: no broadcast abstraction, no client lifecycle management
+- **Global singleton simulator**: all clients share one simulation — no session isolation, no concept of "my simulation"
+- **No lifecycle management**: no cleanup when clients disconnect, no resource limits
 - **Everything in-memory**: mission logs, telemetry history, alerts — all gone on restart
 - **No Dockerfiles**: docker-compose uses raw base images with inline `pip install` on every startup
 - **gRPC is vaporware**: proto defined, `alertService.ts` is literally one comment, no Python gRPC server
 - **Hardcoded everything**: WS URL (`ws://localhost:8000`), CORS origin (`http://localhost:5173`), no config management
 - **No CI/CD**: no GitHub Actions, no linting pipeline, no automated deployment
 - **No deployment**: no live URL
-- **Global singleton simulator**: no concept of sessions — all clients share one simulation
+- **No session isolation**: every visitor mutates the same simulation state
 - **No structured logging**: `print("WebSocket disconnected")` is the extent of observability
 - **Tests share global state**: each test mutates the module-level `simulator` object directly
 
@@ -40,10 +41,9 @@
      │  Static build       │ https://│  WebSocket endpoint      │
      │  served over HTTPS  │────────►│  REST API                │
      └─────────────────────┘         │  gRPC server             │
-                                     │  Background sim loop     │
                                      ├──────────────────────────┤
-                                     │  ConnectionManager       │
-                                     │  SimulatorEngine         │
+                                     │  SimulationManager       │
+                                     │  Per-session tick loops   │
                                      │  EventBus                │
                                      └────────────┬─────────────┘
                                                   │
@@ -67,63 +67,94 @@ Tickets are grouped into tiers. **Tier 1 is non-negotiable** — skip everything
 
 ---
 
-#### T1-1: Decouple Simulation Loop from WebSocket Handlers
+#### T1-1: Per-Session Simulation Architecture
 
 **Status**: Open (maps to existing GitHub issue)
 
-**Problem**: `simulator.update()` is called inside each client's `while True` WS loop. N clients = Nx speed. This is the single biggest architectural flaw.
+**Problem**: `simulator.update()` is called inside each client's `while True` WS loop. N clients = Nx speed. Worse, all clients share a single global `RovSimulator` — there's no session isolation. The fix isn't to patch the shared loop; it's to design an architecture where the bug *can't exist*.
+
+**Design**: Each WebSocket connection gets its own `RovSimulator` instance and its own background tick loop. A `SimulationManager` handles the lifecycle of all active sessions — creation, cleanup, and resource limits.
 
 **Implementation**:
 
-1. Create `backend/connection_manager.py`:
+1. Create `backend/simulation_manager.py`:
    ```python
-   class ConnectionManager:
+   class SimulationSession:
+       """One visitor's isolated simulation."""
+       def __init__(self, session_id: str, simulator: RovSimulator, ws: WebSocket):
+           self.session_id = session_id
+           self.simulator = simulator
+           self.ws = ws
+           self.task: asyncio.Task | None = None
+           self.command_queue: asyncio.Queue = asyncio.Queue()
+
+   class SimulationManager:
+       MAX_CONCURRENT_SESSIONS = 50
+
        def __init__(self):
-           self._connections: list[WebSocket] = []
+           self._sessions: dict[str, SimulationSession] = {}
 
-       async def connect(self, ws: WebSocket):
-           await ws.accept()
-           self._connections.append(ws)
+       async def create_session(self, ws: WebSocket) -> SimulationSession:
+           if len(self._sessions) >= self.MAX_CONCURRENT_SESSIONS:
+               raise TooManySessionsError()
+           session_id = str(uuid.uuid4())
+           sim = RovSimulator()
+           session = SimulationSession(session_id, sim, ws)
+           session.task = asyncio.create_task(self._run_loop(session))
+           self._sessions[session_id] = session
+           return session
 
-       def disconnect(self, ws: WebSocket):
-           self._connections.remove(ws)
+       async def destroy_session(self, session_id: str):
+           session = self._sessions.pop(session_id, None)
+           if session and session.task:
+               session.task.cancel()
 
-       async def broadcast(self, data: dict):
-           dead = []
-           for conn in self._connections:
-               try:
-                   await conn.send_json(data)
-               except Exception:
-                   dead.append(conn)
-           for conn in dead:
-               self._connections.remove(conn)
+       async def _run_loop(self, session: SimulationSession):
+           """Tick loop for a single session — producer side."""
+           try:
+               while True:
+                   # Drain pending commands
+                   while not session.command_queue.empty():
+                       cmd = session.command_queue.get_nowait()
+                       session.simulator.handle_command(cmd)
+                   session.simulator.update()
+                   telemetry = session.simulator.get_telemetry()
+                   await session.ws.send_json(telemetry.model_dump())
+                   await asyncio.sleep(1 / settings.ticks_per_second)
+           except asyncio.CancelledError:
+               pass
+
+       @property
+       def active_session_count(self) -> int:
+           return len(self._sessions)
    ```
 
-2. Create a single background task in `main.py` using `asyncio.create_task()` on startup (use the lifespan context manager, not deprecated `@app.on_event`):
+2. Wire into `main.py` using the lifespan context manager:
    ```python
    @asynccontextmanager
    async def lifespan(app: FastAPI):
-       task = asyncio.create_task(simulation_loop())
+       app.state.sim_manager = SimulationManager()
        yield
-       task.cancel()
+       # Cancel all active sessions on shutdown
+       for sid in list(app.state.sim_manager._sessions):
+           await app.state.sim_manager.destroy_session(sid)
    ```
 
-3. The `/ws/telemetry` endpoint only does:
-   - `manager.connect(ws)` on open
-   - `manager.disconnect(ws)` on close
-   - Forward incoming commands to the simulator via an `asyncio.Queue`
+3. The `/ws/telemetry` endpoint becomes:
+   - On connect: `session = await sim_manager.create_session(ws)`
+   - Listen for incoming commands → `session.command_queue.put(cmd)`
+   - On disconnect: `await sim_manager.destroy_session(session.session_id)`
 
-4. The background loop:
-   - Calls `simulator.update()` at the configured tick rate
-   - Calls `manager.broadcast(telemetry)` after each tick
+4. Add a `TooManySessionsError` that rejects new connections with a WS close code + message when the server is at capacity.
 
 **Acceptance Criteria**:
-- Two clients connected: simulation runs at 1x speed (not 2x)
-- Both clients receive identical, synchronised telemetry
-- Command from either client affects the shared simulation
-- Existing tests updated to work with the new architecture
+- Each browser tab gets its own independent simulation (different scenarios, different state)
+- Two tabs open: each runs at 1x speed, neither affects the other
+- Closing a tab cancels its tick loop and frees resources
+- Server rejects new connections beyond `MAX_CONCURRENT_SESSIONS`
+- Existing tests updated to use `SimulationManager` instead of the global simulator
 
-**Why this matters for interviews**: This is a textbook producer-consumer / pub-sub pattern. Being able to explain why you decoupled the game loop from the connection handlers, and how you used asyncio primitives to coordinate them, is strong signal.
+**Why this matters for interviews**: This demonstrates session-scoped resource management — creating, tracking, and cleaning up stateful resources per client. The architecture eliminates the N-loop bug by design rather than by patch. You can talk about asyncio task lifecycle, backpressure, graceful shutdown, and why you chose isolation over shared state (an ROV has one operator, not a shared control room).
 
 ---
 
@@ -340,22 +371,24 @@ Tickets are grouped into tiers. **Tier 1 is non-negotiable** — skip everything
 
 ---
 
-#### T2-4: Session / Mission Management
+#### T2-4: Mission Persistence & History
 
-**Problem**: One global simulator. All clients share one mission. No concept of "sessions" or "past missions."
+**Problem**: Simulations are ephemeral — when a session ends, all mission data is gone. No record of past runs.
+
+**Depends on**: T1-1 (per-session architecture), T1-2 (PostgreSQL)
 
 **Implementation**:
 
-1. Each simulation run gets a `mission_id` (UUID)
-2. `MissionManager` class tracks active and completed missions
-3. On `START_SIMULATION`: create a new mission record in DB with status, scenario, start time
-4. On mission end: update record with end time, outcome, final stats
+1. Each simulation session (from T1-1) gets a `mission_id` (UUID) when `START_SIMULATION` is received
+2. On mission start: insert a `mission` record in DB (id, scenario, start_time, status)
+3. On mission end or session disconnect: update record with end_time, outcome, final stats
+4. `SimulationManager` hooks into the DB layer to persist mission lifecycle events
 5. REST endpoints:
    - `GET /api/v1/missions` — list all missions with pagination
    - `GET /api/v1/missions/{id}` — get mission detail + events
    - `GET /api/v1/missions/{id}/events` — get events for a specific mission
 
-**Note**: Multi-session (multiple simultaneous simulations) is a stretch goal. For now, one active mission at a time is fine — the point is that missions are *recorded*.
+**Note**: Session isolation is already handled by T1-1. This ticket is purely about *recording* missions so they survive beyond the session.
 
 ---
 
@@ -427,14 +460,14 @@ This is the recommended order of implementation. Each step builds on the previou
 
 | Order | Ticket | Effort | Impact |
 |-------|--------|--------|--------|
-| 1 | T1-1: Decouple sim loop | Medium | Critical — fixes the fundamental architecture bug |
+| 1 | T1-1: Per-session simulation architecture | Medium | Critical — eliminates N-loop bug, adds session isolation |
 | 2 | T1-4: Config management | Small | Unblocks everything else (DB URLs, deployment) |
 | 3 | T1-3: Dockerfiles | Small | Clean build, faster iteration |
 | 4 | T1-2: PostgreSQL persistence | Medium | The single biggest "backend engineer" signal |
 | 5 | T2-3: Test architecture | Medium | Must happen before CI makes sense |
 | 6 | T1-5: CI/CD pipeline | Medium | Shows engineering discipline |
 | 7 | T2-2: Structured logging | Small | Quick win, interview talking point |
-| 8 | T2-4: Session management | Medium | Ties persistence + API design together |
+| 8 | T2-4: Mission persistence & history | Medium | Ties persistence + API design together |
 | 9 | T2-1: gRPC implementation | Medium | Fulfills the dual-protocol promise |
 | 10 | T1-6: Deploy | Medium | Nothing matters without a live URL |
 | 11 | T3-1–T3-5: Polish | Small each | Cleanup pass |
@@ -455,7 +488,7 @@ gRPC (T2-1) is a nice-to-have. It's a talking point even with just the proto fil
 
 When discussing this project for mid-level BE roles, lead with:
 
-1. **"I built a real-time simulation engine with a decoupled architecture"** — background task loop, connection manager, pub-sub broadcast. Not a CRUD app.
+1. **"I built a real-time simulation engine with per-session isolation"** — each visitor gets their own simulator instance with its own asyncio tick loop, managed by a `SimulationManager` that handles lifecycle, cleanup, and resource limits. Not a CRUD app.
 2. **"I added PostgreSQL persistence with migrations"** — schema design, repository pattern, Alembic.
 3. **"The system uses two distinct communication protocols"** — WebSocket for real-time streaming, gRPC for structured historical queries. Explain *why* each was chosen.
 4. **"I set up CI/CD and deployment from scratch"** — GitHub Actions, Docker, Fly.io. You didn't just write code, you shipped it.
@@ -469,7 +502,7 @@ Don't lead with "it's an ROV simulator" — lead with the engineering patterns.
 
 | Existing Issue | Disposition |
 |---|---|
-| Decouple simulation loop / ConnectionManager | → **T1-1** (kept, refined) |
+| Decouple simulation loop / ConnectionManager | → **T1-1** (redesigned: per-session isolation instead of shared state) |
 | PostgreSQL event_log persistence | → **T1-2** (kept, expanded with migrations + repository) |
 | Deploy to Fly.io | → **T1-6** (kept) |
 | Subsystem control buttons (All Stop, Deploy Arm, Jettison) | → **T3-1** (kept as-is) |
@@ -485,7 +518,7 @@ Don't lead with "it's an ROV simulator" — lead with the engineering patterns.
 ### New files
 - `backend/Dockerfile`
 - `backend/config.py`
-- `backend/connection_manager.py`
+- `backend/simulation_manager.py`
 - `backend/database.py`
 - `backend/db_models.py`
 - `backend/repository.py`
@@ -500,7 +533,7 @@ Don't lead with "it's an ROV simulator" — lead with the engineering patterns.
 - `fly.toml` (backend)
 
 ### Modified files
-- `backend/main.py` — lifespan, ConnectionManager, dependency injection
+- `backend/main.py` — lifespan, SimulationManager, dependency injection
 - `backend/simulator.py` — event callback hook, mission_id support
 - `backend/requirements.txt` — add sqlalchemy, alembic, asyncpg, pydantic-settings, structlog, grpcio
 - `docker-compose.yml` — add postgres, use build context
