@@ -20,7 +20,7 @@ export default function Header() {
             {renderSlug ? (
                 <div className="fixed top-15 right-15">
                     <img
-                        src="/slug.png"
+                        src={`${import.meta.env.BASE_URL}slug.png`}
                         alt="Slug logo"
                         className="h-12 w-auto"
                     />
