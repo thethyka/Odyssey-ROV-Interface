@@ -1,5 +1,7 @@
-from pydantic import BaseModel, Field, AfterValidator
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Literal
+
+from pydantic import AfterValidator, BaseModel, Field
+
 
 def round_dp(num_decimals: int):
     """Returns a function that rounds a float to the specified number of decimal places."""
@@ -52,8 +54,8 @@ class MissionState(BaseModel):
 
 class ActiveAlert(BaseModel):
     active: bool
-    severity: Optional[Literal["INFO", "WARNING", "CRITICAL"]] = None
-    message: Optional[str] = None
+    severity: Literal["INFO", "WARNING", "CRITICAL"] | None = None
+    message: str | None = None
 
 
 class RovState(BaseModel):
