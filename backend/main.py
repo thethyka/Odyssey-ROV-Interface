@@ -4,6 +4,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 
+from .config import settings
 from .simulator import RovSimulator
 from .logs import LogEntry
 from .simulation_manager import SimulationManager, TooManySessionsError
@@ -22,7 +23,7 @@ simulator = RovSimulator()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
