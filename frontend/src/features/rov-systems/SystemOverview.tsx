@@ -93,7 +93,7 @@ const FlowDiagram = () => {
     const nodeTypes = useMemo(() => ({ systemNode: SystemNode }), []);
 
     useEffect(() => {
-        const updatedNodes = initialNodes.map((node) => {
+        const updatedNodeData = initialNodes.map((node) => {
             let data: SystemNodeData = { label: "Unknown", icon: GearIcon };
             switch (node.id) {
                 case "power":
@@ -176,7 +176,7 @@ const FlowDiagram = () => {
             return { ...node, data };
         });
 
-        updatedNodes.forEach((n) => {
+        updatedNodeData.forEach((n) => {
             if (n.id === "ms") {
                 // Mission node reflects global scenario outcome
                 if (telemetry.mission_state.status === "mission_success") {
@@ -198,7 +198,7 @@ const FlowDiagram = () => {
         });
 
         const updatedEdges = initialEdges.map((edge) => {
-            const sourceNode = updatedNodes.find((n) => n.id === edge.source);
+            const sourceNode = updatedNodeData.find((n) => n.id === edge.source);
             const sourceStatus = sourceNode?.data.status || "default";
             return {
                 ...edge,
@@ -212,7 +212,19 @@ const FlowDiagram = () => {
             };
         });
 
-        setNodes(updatedNodes);
+        // Preserve any positions the user has dragged to, rather than
+        // resetting to the initial layout on every telemetry update.
+        setNodes((currentNodes) => {
+            const baseNodes =
+                currentNodes.length > 0 ? currentNodes : initialNodes;
+            return updatedNodeData.map((node) => {
+                const existing = baseNodes.find((n) => n.id === node.id);
+                return {
+                    ...node,
+                    position: existing?.position ?? node.position,
+                };
+            });
+        });
         setEdges(updatedEdges);
     }, [telemetry]);
 
