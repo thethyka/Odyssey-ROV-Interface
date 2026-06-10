@@ -11,7 +11,8 @@ export const useTelemetry = () => {
     useEffect(() => {
         console.log("Attempting to connect...");
 
-        const ws = new WebSocket("ws://localhost:8000/ws/telemetry");
+        const wsBaseUrl = import.meta.env.VITE_WS_URL ?? "ws://localhost:8000";
+        const ws = new WebSocket(`${wsBaseUrl}/ws/telemetry`);
 
         ws.onopen = () => {
             console.log("Websocket connection established");

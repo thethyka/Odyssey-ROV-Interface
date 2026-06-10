@@ -14,6 +14,7 @@ from backend.models import (
     SciencePackage,
     Environment,
 )
+from backend.config import settings
 from backend.logs import LogEntry, LogLevel
 
 
@@ -38,7 +39,7 @@ class RovSimulator:
     PRESSURE_CRITICAL_THRESHOLD = TARGET_DEPTH * PRESSURE_PER_METER * 1.2
 
     # Ticks-per-second (used by the websocket loop)
-    TICKS_PER_SECOND = 2
+    TICKS_PER_SECOND = settings.ticks_per_second
 
     def __init__(self):
         self.active_scenario: Optional[str] = None
