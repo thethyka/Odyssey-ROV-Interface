@@ -1,21 +1,20 @@
 # backend/simulator.py
-from datetime import datetime, timezone
-from typing import Optional, List, Dict
+from datetime import UTC, datetime
 
-from backend.models import (
-    RovState,
-    MissionState,
-    ActiveAlert,
-    TelemetryMessage,
-    Power,
-    Propulsion,
-    HullIntegrity,
-    ManipulatorArm,
-    SciencePackage,
-    Environment,
-)
 from backend.config import settings
 from backend.logs import LogEntry, LogLevel
+from backend.models import (
+    ActiveAlert,
+    Environment,
+    HullIntegrity,
+    ManipulatorArm,
+    MissionState,
+    Power,
+    Propulsion,
+    RovState,
+    SciencePackage,
+    TelemetryMessage,
+)
 
 
 class RovSimulator:
@@ -42,14 +41,14 @@ class RovSimulator:
     TICKS_PER_SECOND = settings.ticks_per_second
 
     def __init__(self):
-        self.active_scenario: Optional[str] = None
+        self.active_scenario: str | None = None
         self.scenario_timer: int = 0
         self.simulation_running: bool = False
-        self.mission_log: List[LogEntry] = []
+        self.mission_log: list[LogEntry] = []
         self.operator_override: bool = (
             False  # set when operator issues a propulsion command
         )
-        self.pressure_normalization_target: Optional[float] = None
+        self.pressure_normalization_target: float | None = None
         self.pressure_normalization_ticks: int = 0
         self._reset_state()
 
@@ -78,7 +77,7 @@ class RovSimulator:
     def _add_log_entry(self, level: LogLevel, message: str):
         """Record a new mission log entry."""
         entry = LogEntry(
-            timestamp=datetime.now(timezone.utc), level=level, message=message
+            timestamp=datetime.now(UTC), level=level, message=message
         )
         self.mission_log.append(entry)
 
@@ -87,17 +86,17 @@ class RovSimulator:
     def get_telemetry(self) -> TelemetryMessage:
         """Return a snapshot of current telemetry."""
         return TelemetryMessage(
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             rov_state=self.rov_state,
             mission_state=self.mission_state,
             alert=self.alert,
         )
 
-    def get_mission_log(self) -> List[LogEntry]:
+    def get_mission_log(self) -> list[LogEntry]:
         """Return all mission log entries so far."""
         return self.mission_log
 
-    def handle_command(self, command: Dict):
+    def handle_command(self, command: dict):
         """Handle commands from the frontend."""
         command_name = command.get("command")
         payload = command.get("payload", {})
@@ -145,7 +144,7 @@ class RovSimulator:
 
     # --- Command Handlers ---
 
-    def _handle_start_simulation(self, scenario: Optional[str]):
+    def _handle_start_simulation(self, scenario: str | None):
         if scenario in ["nominal", "pressure_anomaly", "power_fault"]:
             self._reset_state()
             self.active_scenario = scenario

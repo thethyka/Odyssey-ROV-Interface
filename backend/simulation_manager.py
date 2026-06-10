@@ -1,7 +1,6 @@
 # backend/simulation_manager.py
 import asyncio
 import uuid
-from typing import Dict, Optional
 
 from fastapi import WebSocket
 
@@ -19,7 +18,7 @@ class SimulationSession:
         self.session_id = session_id
         self.simulator = simulator
         self.ws = ws
-        self.task: Optional[asyncio.Task] = None
+        self.task: asyncio.Task | None = None
         self.command_queue: asyncio.Queue = asyncio.Queue()
 
 
@@ -29,7 +28,7 @@ class SimulationManager:
     MAX_CONCURRENT_SESSIONS = 50
 
     def __init__(self):
-        self._sessions: Dict[str, SimulationSession] = {}
+        self._sessions: dict[str, SimulationSession] = {}
 
     async def create_session(self, ws: WebSocket) -> SimulationSession:
         if len(self._sessions) >= self.MAX_CONCURRENT_SESSIONS:

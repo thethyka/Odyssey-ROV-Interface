@@ -6,9 +6,8 @@ from fastapi import WebSocketDisconnect
 from fastapi.testclient import TestClient
 
 from backend.main import app
-from backend.simulator import RovSimulator
 from backend.simulation_manager import SimulationManager
-
+from backend.simulator import RovSimulator
 
 # ---------- Fixtures ----------
 

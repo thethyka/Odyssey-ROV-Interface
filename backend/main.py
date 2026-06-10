@@ -2,12 +2,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List
 
 from .config import settings
-from .simulator import RovSimulator
 from .logs import LogEntry
 from .simulation_manager import SimulationManager, TooManySessionsError
+from .simulator import RovSimulator
 
 
 @asynccontextmanager
@@ -40,7 +39,7 @@ async def health():
     return {"status": "ok"}
 
 
-@app.get("/mission-log", response_model=List[LogEntry])
+@app.get("/mission-log", response_model=list[LogEntry])
 async def get_mission_log():
     """Expose mission log over REST (for demo until gRPC is wired).
 
