@@ -7,3 +7,9 @@ select = ["E", "F", "I", "UP", "B"]
 
 [lint.isort]
 known-first-party = ["backend"]
+
+[lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
+
+[lint.per-file-ignores]
+"backend/alembic/*" = ["E", "F", "I", "UP"]

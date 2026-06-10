@@ -1,10 +1,16 @@
+import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import settings
+from .database import get_db_session
 from .logs import LogEntry
+from .repository import EventLogRepository
 from .simulation_manager import SimulationManager, TooManySessionsError
 from .simulator import RovSimulator
 
@@ -19,6 +25,25 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 simulator = RovSimulator()
+
+
+class EventLogOut(BaseModel):
+    id: uuid.UUID
+    timestamp: datetime
+    severity: str
+    message: str
+    mission_id: uuid.UUID
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MissionSummaryOut(BaseModel):
+    mission_id: uuid.UUID
+    event_count: int
+    first_event_at: datetime
+    last_event_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 app.add_middleware(
     CORSMiddleware,
@@ -53,6 +78,24 @@ async def get_mission_log():
 @app.get("/hello")
 async def say_hello():
     return {"message": "Hello from FastAPI backend!"}
+
+
+@app.get("/api/v1/events", response_model=list[EventLogOut])
+async def list_events(
+    severity: str | None = None,
+    mission_id: uuid.UUID | None = None,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """List persisted WARNING/CRITICAL mission events, optionally filtered."""
+    repo = EventLogRepository(db)
+    return await repo.list_events(severity=severity, mission_id=mission_id)
+
+
+@app.get("/api/v1/missions", response_model=list[MissionSummaryOut])
+async def list_missions(db: AsyncSession = Depends(get_db_session)):
+    """List past missions with summary stats derived from persisted events."""
+    repo = EventLogRepository(db)
+    return await repo.list_missions()
 
 
 @app.websocket("/ws/telemetry")
