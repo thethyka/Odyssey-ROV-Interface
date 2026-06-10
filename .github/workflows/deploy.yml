@@ -46,8 +46,9 @@ jobs:
   deploy-backend:
     name: Deploy / Backend (Fly.io)
     runs-on: ubuntu-latest
-    # TODO(T1-6): remove once the Fly app + FLY_API_TOKEN secret exist.
-    continue-on-error: true
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
       - uses: superfly/flyctl-actions/setup-flyctl@master
@@ -65,11 +66,9 @@ jobs:
         run: curl --fail --silent --show-error "${{ env.PAGES_URL }}" > /dev/null
 
       - name: Backend healthz
-        continue-on-error: true
-        run: curl --fail --silent --show-error "${{ env.FLY_APP_URL }}/healthz"
+        run: curl --fail --silent --show-error --max-time 30 "${{ env.FLY_APP_URL }}/healthz"
 
       - name: Backend WebSocket handshake
-        continue-on-error: true
         run: |
           pip install --quiet websockets
           python3 - <<'PY'

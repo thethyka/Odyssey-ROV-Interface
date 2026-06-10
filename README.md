@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/thethyka/Odyssey-ROV-Interface/actions/workflows/ci.yml/badge.svg)](https://github.com/thethyka/Odyssey-ROV-Interface/actions/workflows/ci.yml)
 
+🔴 **Live demo:** [thethyka.github.io/Odyssey-ROV-Interface](https://thethyka.github.io/Odyssey-ROV-Interface/) · Backend: [odyssey-rov-backend.fly.dev](https://odyssey-rov-backend.fly.dev/healthz)
+
 We’ve just heard word there’s a new deep-sea bioluminescent sea slug, *Bathydevius caudactylus*, spotted off the coast of California, 2000m deep in a trench!
 Apparently, it has a starry, mesmerizing effect.
 
