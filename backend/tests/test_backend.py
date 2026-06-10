@@ -3,36 +3,8 @@ import time
 
 import pytest
 from fastapi import WebSocketDisconnect
-from fastapi.testclient import TestClient
 
-from backend.main import app
 from backend.simulation_manager import SimulationManager
-from backend.simulator import RovSimulator
-
-# ---------- Fixtures ----------
-
-
-@pytest.fixture
-def client():
-    """TestClient as a context manager so FastAPI's lifespan (and therefore
-    app.state.sim_manager) actually starts up/shuts down for each test."""
-    with TestClient(app) as c:
-        yield c
-
-
-@pytest.fixture(autouse=True)
-def fast_mode():
-    """Run every session's simulator at high tick rate for fast tests.
-
-    TICKS_PER_SECOND lives on the RovSimulator class, and each websocket
-    session now creates its own instance, so we patch the class attribute
-    rather than a single shared instance.
-    """
-    original = RovSimulator.TICKS_PER_SECOND
-    RovSimulator.TICKS_PER_SECOND = 200
-    yield
-    RovSimulator.TICKS_PER_SECOND = original
-
 
 # ---------- Helpers ----------
 

@@ -12,6 +12,12 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173"]
     ticks_per_second: int = 2
     log_level: str = "INFO"
+    # When true, the DB engine uses NullPool so connections are never reused
+    # across event loops. The test suite spins up a fresh event loop per
+    # TestClient, and pooled asyncpg connections are bound to the loop that
+    # created them — reusing one on a later loop deadlocks. Production runs on
+    # a single long-lived loop, so it keeps real pooling (testing=False).
+    testing: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

@@ -1,4 +1,5 @@
 # backend/simulator.py
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 from backend.config import settings
@@ -50,6 +51,8 @@ class RovSimulator:
         )
         self.pressure_normalization_target: float | None = None
         self.pressure_normalization_ticks: int = 0
+        # Optional hook invoked with each new LogEntry (e.g. to persist to a DB).
+        self.on_event: Callable[[LogEntry], None] | None = None
         self._reset_state()
 
     # --- Setup & Logging ---
@@ -80,6 +83,8 @@ class RovSimulator:
             timestamp=datetime.now(UTC), level=level, message=message
         )
         self.mission_log.append(entry)
+        if self.on_event:
+            self.on_event(entry)
 
     # --- Public API ---
 

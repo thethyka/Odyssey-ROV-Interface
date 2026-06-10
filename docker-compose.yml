@@ -1,15 +1,41 @@
 version: '3.8'
 
 services:
+  db:
+    image: postgres:16
+    environment:
+      - POSTGRES_USER=odyssey
+      - POSTGRES_PASSWORD=odyssey
+      - POSTGRES_DB=odyssey
+    volumes:
+      - odyssey-db-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odyssey"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  adminer:
+    image: adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+
   backend:
     build:
       context: ./backend
     working_dir: /app
     volumes:
       - ./backend:/app/backend
-    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+    command: sh -c "alembic -c backend/alembic.ini upgrade head && uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload"
     ports:
       - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
 
   frontend:
     image: node:22-alpine
@@ -23,3 +49,6 @@ services:
       - "5173:5173"
     depends_on:
       - backend
+
+volumes:
+  odyssey-db-data:

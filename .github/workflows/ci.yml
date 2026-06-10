@@ -63,6 +63,7 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements-dev.txt
       - run: pip install -r backend/requirements-dev.txt
+      - run: alembic -c backend/alembic.ini upgrade head
       - run: pytest backend/tests
 
   backend-build:

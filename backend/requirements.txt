@@ -3,4 +3,8 @@ uvicorn[standard]
 pydantic
 pydantic-settings
 pytest
+pytest-asyncio
 httpx
+sqlalchemy[asyncio]
+alembic
+asyncpg
